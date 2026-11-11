@@ -132,6 +132,12 @@ export function DashboardContent() {
   const showWards = Number(assumptions.wardOverlay ?? 0) === 1;
   const change = (key, value) => setAssumptions((current) => ({...current, [key]: Number(value)}));
   const geometry = useMemo(() => JSON.parse(queries.map_geometry.rows[0].geometry_json), [queries.map_geometry.rows]);
+  const noiseLayerAvailable = Boolean(geometry.noiseOverlay?.href);
+  // View links omit zero-valued assumptions: use 1 = on, 2 = off, absent = automatic.
+  const noiseLayerPreference = Number(assumptions.noiseLayer ?? 0);
+  const noiseLayerEnabled = noiseLayerPreference === 1 ? true : noiseLayerPreference === 2 ? false
+    : mode === "noise" || mode === "both";
+  const showNoise = noiseLayerAvailable && noiseLayerEnabled;
   // Prefix the reviewed ward IDs so the page filter presents the full list in
   // numerical order. These small rows are only used to enumerate choices.
   const filterQueries = useMemo(() => ({...queries, permits:{...queries.permits, rows:[
@@ -149,6 +155,16 @@ export function DashboardContent() {
     } else if (id === "community" && value !== "all") setFilter("ward", "all");
     if (id === "ward" || id === "community") setSelectedId(null);
     setFilter(id, value);
+  };
+  const resetView = () => {
+    setFilter("community", "all"); setFilter("ward", "all"); setFilter("building", "all"); setSelectedId(null);
+    setAssumptions((current) => {
+      const next = {...current,yearStart:firstYear,yearEnd:config.population.last_complete_year,
+        aadt:config.exposure.default_traffic_aadt,distance:config.exposure.default_distance_m,
+        noise:config.exposure.default_noise_db,screenMode:0,housingGroup:0};
+      delete next.noiseLayer;
+      return next;
+    });
   };
   const allScoped = reviewedRows("permits", ["permit_id"]);
   const scoped = allScoped.filter((r) => r.permit_year >= yearStart && r.permit_year <= yearEnd && matchesHousingGroup(r,housingGroup));
@@ -209,7 +225,7 @@ export function DashboardContent() {
   if (activeTabId === "methods") return <Methods snapshot={snapshot} queries={queries} />;
   return <>
     <Filters sticky filters={pageFilters} queries={filterQueries} values={filters} onChange={onFilterChange}
-      trailingControls={<Button onClick={() => {setFilter("community","all");setFilter("ward","all");setFilter("building","all");setSelectedId(null);setAssumptions((x)=>({...x,yearStart:firstYear,yearEnd:config.population.last_complete_year,aadt:config.exposure.default_traffic_aadt,distance:config.exposure.default_distance_m,noise:config.exposure.default_noise_db,screenMode:0,housingGroup:0}));}}>Reset view</Button>} />
+      trailingControls={<Button onClick={resetView}>Reset view</Button>} />
     <p className="ch-scope">Where Chicago permits new homes · 2006 onward · permits through {snapshot.analysisSummary.latest_permit_date}. Recent road conditions are overlaid on historical permits. Choose a community or a ward for a local summary; selecting one clears the other.</p>
     <div className="ch-controls">
       <div className="ch-housing-group"><span>Housing group</span><SegmentedControl label="Housing group" value={housingGroup} options={housingGroups}
@@ -225,11 +241,12 @@ export function DashboardContent() {
     </SortableRegion>
     <p className="ch-review-warning">Shares use identified homes, not a complete census of new housing. {number(missingCount)} candidate full-building records in this scope remain outside the headline. {housingGroup !== "all" && <>Records without a unit count cannot be assigned to this housing group. </>}Unknown exposure stays in the denominator. <a href="#noise-sensitivity">Noise location sensitivity ↓</a></p>
     <Section id="map-heading" title="Explore the permit locations" spacing="after-metrics"
-      filters={<div className="ch-map-options"><SegmentedControl label="Exposure screen" value={mode} options={modes} onChange={(v)=>change("screenMode",modes.findIndex((x)=>x.value===v))} /><Switch label="Ward boundaries (2023–)" checked={showWards} onChange={(value)=>change("wardOverlay",value ? 1 : 0)} /></div>}>
+      filters={<div className="ch-map-options"><SegmentedControl label="Exposure screen" value={mode} options={modes} onChange={(v)=>change("screenMode",modes.findIndex((x)=>x.value===v))} /><Switch label="Road noise layer" checked={showNoise} disabled={!noiseLayerAvailable} onChange={(value)=>change("noiseLayer",value ? 1 : 2)} /><Switch label="Ward boundaries (2023–)" checked={showWards} onChange={(value)=>change("wardOverlay",value ? 1 : 0)} /></div>}>
       <DataComponent id="housing-map" title="Housing and road exposure" variant="card" kind="custom" {...sourceProps}
         queryIds={["permits","map_geometry"]} sourceRowsByQuery={{permits:housing,map_geometry:queries.map_geometry.rows}} displayRows={tableRows}>
-        <div className="ch-map-layout"><HousingMap rows={housing} geometry={geometry} aadt={aadt} showWards={showWards} selectedWard={ward === "all" ? 0 : Number(ward)} onSelectWard={(value)=>onFilterChange("ward",String(value))} selectedId={selectedId} onSelect={(r)=>setSelectedId(r?.permit_id ?? r)} screen={screen} />
+        <div className="ch-map-layout"><HousingMap rows={housing} geometry={geometry} aadt={aadt} showNoise={showNoise} showWards={showWards} selectedWard={ward === "all" ? 0 : Number(ward)} onSelectWard={(value)=>onFilterChange("ward",String(value))} selectedId={selectedId} onSelect={(r)=>setSelectedId(r?.permit_id ?? r)} screen={screen} />
           <div><PlaceSummary summary={placeSummary} /><PermitDetail row={selected} /></div></div>
+        {!noiseLayerAvailable && <p className="ch-note" role="status">The road-noise background is unavailable in this snapshot; the permit screen still uses the recorded noise categories.</p>}
         <p className="ch-note" data-reviewed-rows>{number(current.exposed)} of {number(current.units)} homes meet the selected screen ({pct(current.exposedShare)}). {number(current.unknown)} homes have unknown exposure. Gray lines show roads meeting the selected total-traffic threshold in every view.</p>
         {mode === "trucks" && <p className="ch-note">Truck screen: within {distance} m of a road with at least 1,000 recorded heavy commercial vehicles/day. Zero or undated truck counts do not establish zero truck traffic.</p>}
       </DataComponent>

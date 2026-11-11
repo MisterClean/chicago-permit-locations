@@ -21,6 +21,8 @@ The traffic screen is a proximity-based proxy for traffic-related pollution, not
 
 The report filters by year, housing size, community area, current ward, traffic threshold, distance and noise category. The **Single family** and **Multifamily** controls group authorizations with one and two or more units, respectively; they do not independently establish the physical structure type. Select a community or ward to see its summary, or click a ward on the map. Selecting one geography clears the other.
 
+The **Road noise layer** switch displays the BTS road-noise categories behind the permit markers. It turns on automatically in the Road noise and Both views unless a layer preference is selected. The surface uses the same 2023 road-input category data as the analysis; transparent areas may be below the 45-dBA display floor or unmodeled and should not be treated as definitively quiet. These are modeled categories, not precise measurements at each home.
+
 Ward selection uses the City's **2023-onward boundaries for every permit year**. Projects without a unique ward assignment are excluded from individual ward totals and reported separately. The map's display geometry is simplified; analytical assignment uses the full source polygons.
 
 ## Privacy and public repository contents

@@ -1,17 +1,25 @@
 """Checks that protect the exposure denominator and spatial threshold meaning."""
 
+import base64
+import json
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 import rasterio
 from pyproj import Transformer
-from rasterio.transform import from_origin
+from rasterio.errors import NotGeoreferencedWarning
+from rasterio.io import MemoryFile
+from rasterio.transform import from_bounds, from_origin
+from rasterio.warp import transform_bounds
 
 from chicago_housing.exposure import (
     _decode_noise_tile,
     annotate_noise_exposure,
     annotate_road_exposure,
+    fetch_noise_categories,
+    project_noise_overlay,
     road_geometry_2d,
     tile_coordinates,
 )
@@ -106,3 +114,78 @@ def test_only_exact_legend_colors_are_classified(tmp_path: Path) -> None:
     assert codes[0,0] == 55
     assert codes[0,1] == 0
     assert unexpected == 1
+
+
+def _synthetic_noise_legend(path: Path) -> dict[int, tuple[int, int, int, int]]:
+    colors = {code: (code, code // 2, 255 - code, 255) for code in (45, 50, 55, 60, 70, 80, 90)}
+    entries = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        for code, color in colors.items():
+            with MemoryFile() as image:
+                with image.open(driver="PNG", height=1, width=1, count=4, dtype="uint8") as png:
+                    png.write(np.array(color, dtype="uint8").reshape(4, 1, 1))
+                encoded = base64.b64encode(image.read()).decode("ascii")
+            entries.append({"label": f"{code}.0 - category", "imageData": encoded})
+    path.write_text(json.dumps({"layers": [{"id": 3, "legend": entries}]}), encoding="utf-8")
+    return colors
+
+
+def test_noise_overlay_reprojects_original_categories_with_unknown_transparent(tmp_path: Path) -> None:
+    colors = _synthetic_noise_legend(tmp_path / "legend.json")
+    x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(-87.65, 41.9)
+    raster = tmp_path / "noise.tif"
+    data = np.array([[45, 50], [0, 70]], dtype="uint8")
+    source_transform = from_origin(x - 80, y + 80, 80, 80)
+    with rasterio.open(raster, "w", driver="GTiff", height=2, width=2, count=1, dtype="uint8",
+                       crs="EPSG:3857", transform=source_transform, nodata=0) as source:
+        source.write(data, 1)
+        bounds = transform_bounds(source.crs, "EPSG:26916", *source.bounds)
+    overlay = project_noise_overlay(raster, legend_path=tmp_path / "legend.json",
+                                    map_bounds=bounds, resolution_m=12)
+    assert overlay["href"].startswith("data:image/png;base64,")
+    assert overlay["x"] == overlay["y"] == 0
+    assert overlay["width"] == pytest.approx(bounds[2] - bounds[0])
+    assert overlay["height"] == pytest.approx(bounds[3] - bounds[1])
+    assert [item["value"] for item in overlay["categories"]] == [45, 50, 55, 60, 70, 80, 90]
+
+    image_data = base64.b64decode(overlay["href"].split(",", 1)[1])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        with MemoryFile(image_data) as memory, memory.open() as image:
+            rgba = image.read()
+    target_transform = from_bounds(*bounds, rgba.shape[2], rgba.shape[1])
+    back = Transformer.from_crs(26916, 3857, always_xy=True)
+    seen = set()
+    for row in range(rgba.shape[1]):
+        for col in range(rgba.shape[2]):
+            tx, ty = target_transform @ (col + 0.5, row + 0.5)
+            sx, sy = back.transform(tx, ty)
+            source_col, source_row = (~source_transform) @ (sx, sy)
+            if not (0.1 < source_col < 1.9 and 0.1 < source_row < 1.9):
+                continue
+            if abs(source_col - 1) < 0.1 or abs(source_row - 1) < 0.1:
+                continue
+            code = int(data[int(source_row), int(source_col)])
+            assert tuple(rgba[:, row, col]) == ((0, 0, 0, 0) if code == 0 else colors[code])
+            seen.add(code)
+    assert seen == {0, 45, 50, 70}
+
+
+def test_noise_overlay_rejects_unexpected_category_codes(tmp_path: Path) -> None:
+    _synthetic_noise_legend(tmp_path / "legend.json")
+    raster = tmp_path / "noise.tif"
+    with rasterio.open(raster, "w", driver="GTiff", height=1, width=1, count=1, dtype="uint8",
+                       crs="EPSG:26916", transform=from_origin(300000, 4600000, 30, 30)) as source:
+        source.write(np.array([[42]], dtype="uint8"), 1)
+    with pytest.raises(ValueError, match="Unexpected category codes"):
+        project_noise_overlay(raster, legend_path=tmp_path / "legend.json",
+                              map_bounds=(300000, 4599970, 300030, 4600000), resolution_m=30)
+
+
+def test_noise_cache_requires_matching_legend_without_refreshing(tmp_path: Path) -> None:
+    raster = tmp_path / "noise_bts_2023_categories.tif"
+    raster.write_bytes(b"existing raster")
+    with pytest.raises(FileNotFoundError, match="lack their archived legend"):
+        fetch_noise_categories(tmp_path)
+    assert raster.read_bytes() == b"existing raster"

@@ -29,7 +29,14 @@ function screenPoint(svg, clientX, clientY) {
   return point.matrixTransform(matrix.inverse());
 }
 
-const Geography = memo(function Geography({ geometry, aadt, metresPerPixel, zoom, showWards }) {
+function hasNoiseOverlay(noise) {
+  return typeof noise?.href === "string" && noise.href.startsWith("data:image/png;base64,")
+    && [noise.x, noise.y, noise.width, noise.height].every((value) => value != null && Number.isFinite(Number(value)))
+    && Number(noise.width) > 0 && Number(noise.height) > 0;
+}
+
+const Geography = memo(function Geography({ geometry, aadt, metresPerPixel, zoom, showWards, showNoise }) {
+  const clipId = useId();
   const roads = useMemo(() => {
     const groups = [[], [], []];
     for (const road of geometry.roads || []) {
@@ -38,8 +45,15 @@ const Geography = memo(function Geography({ geometry, aadt, metresPerPixel, zoom
     }
     return groups.map((paths) => paths.join(" "));
   }, [geometry.roads, aadt]);
+  const noise = geometry.noiseOverlay;
+  const showImage = showNoise && hasNoiseOverlay(noise);
   return <g aria-hidden="true" pointerEvents="none">
+    {showImage && <defs><clipPath id={clipId}>
+      {(geometry.cityPaths || []).map((path, index) => <path key={index} d={path} clipRule="evenodd" />)}
+    </clipPath></defs>}
     {(geometry.cityPaths || []).map((path, index) => <path key={index} d={path} className="housing-map-city" vectorEffect="non-scaling-stroke" />)}
+    {showImage && <image href={noise.href} x={noise.x} y={noise.y} width={noise.width} height={noise.height}
+      preserveAspectRatio="none" clipPath={`url(#${clipId})`} className="housing-map-noise" />}
     {!showWards && (geometry.communities || []).map((community) => <path key={community.id} d={community.path} className="housing-map-community" vectorEffect="non-scaling-stroke" />)}
     {roads.map((path, index) => path && <path key={index} d={path} className="housing-map-road" strokeWidth={[0.8, 1.25, 1.8][index]} vectorEffect="non-scaling-stroke" />)}
     {!showWards && zoom >= 1.8 && (geometry.communities || []).map((community) => (
@@ -51,9 +65,14 @@ const Geography = memo(function Geography({ geometry, aadt, metresPerPixel, zoom
   </g>;
 });
 
-const WardOverlay = memo(function WardOverlay({ wards, metresPerPixel }) {
+const WardOverlay = memo(function WardOverlay({ wards, metresPerPixel, selectedWard, showNoise }) {
   return <g className="housing-map-wards" aria-hidden="true" pointerEvents="none">
-    {wards.map((ward) => <path key={ward.id} d={ward.path} className="housing-map-ward" vectorEffect="non-scaling-stroke" />)}
+    {showNoise && wards.map((ward) => <path key={`halo-${ward.id}`} d={ward.path}
+      className={Number(ward.id) === Number(selectedWard) ? "housing-map-ward-halo is-selected" : "housing-map-ward-halo"}
+      vectorEffect="non-scaling-stroke" />)}
+    {wards.map((ward) => <path key={ward.id} d={ward.path}
+      className={Number(ward.id) === Number(selectedWard) ? "housing-map-ward is-selected" : "housing-map-ward"}
+      vectorEffect="non-scaling-stroke" />)}
     {wards.map((ward) => <text key={ward.id} x={ward.labelX} y={ward.labelY}
       className="housing-map-ward-label" fontSize={11 * metresPerPixel} strokeWidth={4 * metresPerPixel}
       textAnchor="middle" dominantBaseline="central">{ward.id}</text>)}
@@ -97,7 +116,7 @@ function ZoomIcon({ minus }) {
 
 /** Actual projected Chicago geometry. Filtering, source inspection and the
  * accessible permit table belong to the parent evidence component. */
-export function HousingMap({ rows, geometry, aadt, showWards = false, selectedWard = 0, onSelectWard, selectedId, onSelect, screen }) {
+export function HousingMap({ rows, geometry, aadt, showWards = false, showNoise = false, selectedWard = 0, onSelectWard, selectedId, onSelect, screen }) {
   const svgRef = useRef(null);
   const stageRef = useRef(null);
   const gesture = useRef(null);
@@ -268,18 +287,22 @@ export function HousingMap({ rows, geometry, aadt, showWards = false, selectedWa
     return <div className="housing-map-unavailable" role="status">Chicago map geometry is unavailable. The permit table retains the reviewed records.</div>;
   }
 
+  const noise = geometry.noiseOverlay;
+  const hasNoise = hasNoiseOverlay(noise);
+  const displayNoise = showNoise && hasNoise;
+
   return <div className="housing-map" data-reviewed-rows>
-    <div ref={stageRef} className={`housing-map-stage${dragging ? " is-dragging" : ""}`}>
+    <div ref={stageRef} className={`housing-map-stage${dragging ? " is-dragging" : ""}${displayNoise ? " has-noise-layer" : ""}`}>
       <svg ref={svgRef} className="housing-map-svg" viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-        tabIndex={0} role="group" aria-label="Chicago housing permit map. Arrow keys pan; plus and minus zoom; Home resets. Tab to a permit, then Left and Right change permits, Page Up and Page Down jump 25 permits, Enter selects, and Escape dismisses its tooltip."
+        tabIndex={0} role="group" aria-label={`Chicago housing permit map${displayNoise ? " with modeled road-noise layer" : ""}. Arrow keys pan; plus and minus zoom; Home resets. Tab to a permit, then Left and Right change permits, Page Up and Page Down jump 25 permits, Enter selects, and Escape dismisses its tooltip.`}
         onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
         onPointerLeave={() => { if (!gesture.current) setHover((previous) => previous?.keyboard ? previous : null); }} onKeyDown={keyboardMove}
         onFocus={markerFocus} onBlur={(event) => { if (event.target.hasAttribute?.("data-permit-id")) setHover(null); }}
         onDoubleClick={(event) => { cancelWardClick(); changeZoom(1.8, screenPoint(svgRef.current, event.clientX, event.clientY)); }}>
-        <Geography geometry={geometry} aadt={aadt} metresPerPixel={metresPerPixel} zoom={zoom} showWards={showWards} />
+        <Geography geometry={geometry} aadt={aadt} metresPerPixel={metresPerPixel} zoom={zoom} showWards={showWards} showNoise={displayNoise} />
         {showWards && <WardHitTargets wards={geometry.wards || []} selectedWard={selectedWard} />}
         <PermitMarks points={points} metresPerPixel={metresPerPixel} selectedId={selectedId} activeId={activeId} tooltipId={tooltipId} />
-        {showWards && <WardOverlay wards={geometry.wards || []} metresPerPixel={metresPerPixel} />}
+        {showWards && <WardOverlay wards={geometry.wards || []} metresPerPixel={metresPerPixel} selectedWard={selectedWard} showNoise={displayNoise} />}
         {selected && <circle cx={selected.row.map_x} cy={selected.row.map_y}
           r={(pointRadius(selected.row.unit_count) + 4) * metresPerPixel} className="housing-map-selection-ring"
           vectorEffect="non-scaling-stroke" pointerEvents="none" aria-hidden="true" />}
@@ -309,13 +332,24 @@ export function HousingMap({ rows, geometry, aadt, showWards = false, selectedWa
       {points.length === 0 && <div className="housing-map-empty" role="status">No mapped permits in this selection.</div>}
     </div>
     <div className="housing-map-footer">
-      <div className="housing-map-key" aria-label="Map legend">
+      <div className="housing-map-key" aria-label="Permit and road legend">
+        <strong className="housing-map-key-title">Permits</strong>
         <span><i className="housing-map-swatch is-exposed" />Meets screen</span>
         <span><i className="housing-map-swatch is-below" />Below screen</span>
         <span><i className="housing-map-swatch is-unknown" />Unknown</span>
         <span><i className="housing-map-road-swatch" />Roads ≥{Number(aadt).toLocaleString()} vehicles/day</span>
         {showWards && <span><i className="housing-map-ward-swatch" />Ward boundaries · 2023–</span>}
       </div>
+      {displayNoise && <div className="housing-map-noise-legend" role="group" aria-label="Modeled road noise legend">
+        <strong>Modeled road noise · dBA, 24-hour</strong>
+        <div className="housing-map-noise-categories">
+          {(Array.isArray(noise.categories) ? noise.categories : []).map((category) => <span key={category.value}>
+            <i aria-hidden="true" style={{backgroundColor:category.color}} />{category.label}
+          </span>)}
+        </div>
+      </div>}
+      {displayNoise && <p className="housing-map-note">The colored surface is the <a href="https://www.bts.gov/geospatial/national-transportation-noise-map" target="_blank" rel="noreferrer">BTS modeled road-noise map</a> using 2023 road inputs. Transparent areas may be below 45 dBA or unmapped/unknown; they are not necessarily quiet. Colors show modeled categories, not precise sound levels at homes.</p>}
+      {showNoise && !hasNoise && <p className="housing-map-note" role="status">The road-noise map layer is unavailable in this snapshot.</p>}
       {showWards && <p className="housing-map-note">Click a ward or use the ward selector to filter. <a href="https://data.cityofchicago.org/d/p293-wvbd" target="_blank" rel="noreferrer">City boundaries effective May 2023</a> are used for all permit years.</p>}
       <p className="housing-map-note">Circle area shows permitted homes; small projects are enlarged and large circles capped. Drag to pan; use the zoom controls or double-click.</p>
       <p className="housing-map-note">Keyboard: Tab to a permit; Left/Right move between permits, Page Up/Down jump 25, Enter selects, and Escape closes the tooltip.</p>

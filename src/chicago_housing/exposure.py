@@ -20,9 +20,11 @@ import numpy as np
 import rasterio
 import requests
 from pyproj import Transformer
+from rasterio.enums import Resampling
 from rasterio.errors import NotGeoreferencedWarning
 from rasterio.io import MemoryFile
-from rasterio.transform import from_origin
+from rasterio.transform import from_bounds, from_origin
+from rasterio.warp import reproject
 from shapely import transform
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
@@ -38,6 +40,10 @@ HCV_THRESHOLDS = (500, 1000, 2500, 5000)
 DISTANCES_M = (100, 200, 300, 500)
 NOISE_THRESHOLDS = (50, 55, 60, 65, 70)
 WEB_MERCATOR_HALF_WORLD = 20037508.342789244
+NOISE_BAND_LABELS = {
+    45: "45–49.9 dBA", 50: "50–54.9 dBA", 55: "55–59.9 dBA",
+    60: "60–69.9 dBA", 70: "70–79.9 dBA", 80: "80–89.9 dBA", 90: ">90 dBA",
+}
 
 
 def _json_response(session: requests.Session, url: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -149,6 +155,68 @@ def legend_palette(legend: Mapping[str, Any]) -> dict[tuple[int, int, int, int],
     return palette
 
 
+def project_noise_overlay(
+    raster_path: Path,
+    *,
+    legend_path: Path,
+    map_bounds: tuple[float, float, float, float],
+    resolution_m: float,
+) -> dict[str, Any]:
+    """Create an offline PNG of BTS categories aligned with the projected map.
+
+    The destination grid is EPSG:26916. Nearest-neighbour reprojection preserves
+    category values, and 0 remains fully transparent because it can mean either
+    below 45 dBA or unavailable. This image is for display only: calculations
+    continue to sample the original archived raster at permit points.
+    """
+    left, bottom, right, top = map_bounds
+    if not all(math.isfinite(v) for v in (*map_bounds, resolution_m)):
+        raise ValueError("Noise overlay extent and resolution must be finite.")
+    if left >= right or bottom >= top or resolution_m <= 0:
+        raise ValueError("Noise overlay requires a positive extent and resolution.")
+
+    width, height = right - left, top - bottom
+    cols, rows = math.ceil(width / resolution_m), math.ceil(height / resolution_m)
+    destination = np.zeros((rows, cols), dtype="uint8")
+    destination_transform = from_bounds(left, bottom, right, top, cols, rows)
+    with rasterio.open(raster_path) as source:
+        if source.count != 1 or source.crs is None:
+            raise ValueError("Noise overlay requires a georeferenced single-band categorical raster.")
+        reproject(
+            source=source.read(1), destination=destination,
+            src_transform=source.transform, src_crs=source.crs,
+            dst_transform=destination_transform, dst_crs="EPSG:26916",
+            resampling=Resampling.nearest, tolerance=0.0,
+        )
+
+    palette = legend_palette(json.loads(legend_path.read_text(encoding="utf-8")))
+    unknown_codes = {int(code) for code in np.unique(destination)} - {0, *palette.values()}
+    if unknown_codes:
+        raise ValueError(f"Unexpected category codes in noise overlay: {sorted(unknown_codes)}")
+    colors = {code: color for color, code in palette.items()}
+    lookup = np.zeros((256, 4), dtype="uint8")
+    for code, color in colors.items():
+        lookup[code] = color
+    rgba = np.moveaxis(lookup[destination], -1, 0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        with MemoryFile() as image:
+            with image.open(driver="PNG", width=cols, height=rows, count=4, dtype="uint8") as png:
+                png.write(rgba)
+            encoded = base64.b64encode(image.read()).decode("ascii")
+
+    categories = [{
+        "value": code, "label": NOISE_BAND_LABELS[code],
+        "color": "#" + "".join(f"{channel:02x}" for channel in colors[code][:3]),
+    } for code in sorted(colors)]
+    return {
+        "href": f"data:image/png;base64,{encoded}",
+        "x": 0, "y": 0, "width": width, "height": height,
+        "categories": categories, "sourceYear": 2023,
+        "pixelWidthM": width / cols, "pixelHeightM": height / rows,
+    }
+
+
 def _decode_noise_tile(path: Path, colors: Mapping[tuple[int, int, int, int], int]) -> tuple[np.ndarray, int]:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", NotGeoreferencedWarning)
@@ -179,6 +247,11 @@ def fetch_noise_categories(raw_dir: Path, *, refresh: bool = False) -> Path:
     """
     destination = raw_dir / "noise_bts_2023_categories.tif"
     if destination.exists() and not refresh:
+        if not (raw_dir / "noise_bts_2023_legend.json").is_file():
+            raise FileNotFoundError(
+                "Cached noise categories lack their archived legend. Restore the matching "
+                "legend or explicitly refresh a separate cache; the raster was not changed."
+            )
         return destination
     tile_dir = raw_dir / "noise_bts_2023_tiles"
     tile_dir.mkdir(parents=True, exist_ok=True)

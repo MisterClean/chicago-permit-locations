@@ -28,6 +28,7 @@ from chicago_housing.exposure import (
     NOISE_URL,
     annotate_exposure,
     fetch_exposure_sources,
+    project_noise_overlay,
 )
 from chicago_housing.parcels import fetch_supporting_profiles, run_parcel_audit
 from chicago_housing.permits import (
@@ -101,7 +102,9 @@ def _path(geometry, *, origin_x: float, top_y: float) -> str:
     )
 
 
-def map_geometry(boundaries: dict, roads: dict, rows: list[dict]) -> tuple[dict, list[dict]]:
+def map_geometry(
+    boundaries: dict, roads: dict, rows: list[dict], *, raw_dir: Path,
+) -> tuple[dict, list[dict]]:
     projector = Transformer.from_crs("EPSG:4326", "EPSG:26916", always_xy=True)
     city = transform(projector.transform, shape(boundaries["city"]["features"][0]["geometry"]))
     min_x, min_y, max_x, max_y = city.bounds
@@ -109,6 +112,12 @@ def map_geometry(boundaries: dict, roads: dict, rows: list[dict]) -> tuple[dict,
     geometry = {"width": max_x-min_x+2400, "height": max_y-min_y+2400,
                 "cityPaths": [_path(city.simplify(18), origin_x=origin_x, top_y=top_y)],
                 "communities": [], "wards": [], "roads": []}
+    geometry["noiseOverlay"] = project_noise_overlay(
+        raw_dir / "noise_bts_2023_categories.tif",
+        legend_path=raw_dir / "noise_bts_2023_legend.json",
+        map_bounds=(origin_x, top_y-geometry["height"], origin_x+geometry["width"], top_y),
+        resolution_m=30,
+    )
     for feature in boundaries["communities"]["features"]:
         geom = transform(projector.transform, shape(feature["geometry"]))
         label = geom.representative_point()
@@ -298,14 +307,18 @@ def make_snapshot(rows: list[dict], geometry: dict, summaries: dict, profile: di
                 "unlinked_preliminary_scenario": json.dumps(summaries["unlinked_preliminary_scenario"])}], "source": source},
             "map_geometry": {"rows": [{"geometry_json": json.dumps(geometry, separators=(",", ":"))}],
                              "payloadColumns": ["geometry_json"],
-                             "source": {"label": "Chicago boundaries and IDOT centreline geometry", "links": [
+                             "source": {"label": "Chicago boundaries, IDOT roads and BTS road-noise categories", "links": [
                                  {"label": "City boundary", "url": "https://data.cityofchicago.org/d/qqq8-j68g"},
                                  {"label": "Community areas", "url": "https://data.cityofchicago.org/d/igwz-8jzy"},
                                  {"label": "Ward boundaries (May 2023 onward)", "url": "https://data.cityofchicago.org/d/p293-wvbd"},
-                                 {"label": "IDOT roads", "url": IDOT_URL}],
-                                 "files": ["boundary_city.geojson", "boundary_communities.geojson", "boundary_wards.geojson"],
+                                 {"label": "IDOT roads", "url": IDOT_URL},
+                                 {"label": "BTS road-noise map service", "url": NOISE_URL},
+                                 {"label": "BTS noise methods", "url": NOISE_DOC_URL}],
+                                 "files": ["boundary_city.geojson", "boundary_communities.geojson", "boundary_wards.geojson",
+                                           "noise_bts_2023_categories.tif", "noise_bts_2023_legend.json"],
                                  "caveats": ["Projected in EPSG:26916; simplified 18–20 metres for display only. Analysis uses unsimplified geometry.",
-                                             "Ward selection uses the May 2023-onward boundaries for every permit year, not historic ward boundaries; it does not change exposure inputs."]}},
+                                             "Ward selection uses the May 2023-onward boundaries for every permit year, not historic ward boundaries; it does not change exposure inputs.",
+                                             "BTS road-only category colors use 2023 inputs and are reprojected with nearest-neighbour sampling for display. Transparent areas may be below 45 dBA or unavailable; they are not classified as quiet."]}},
         },
         "analysisSummary": summaries,
         "permitProfile": profile,
@@ -380,7 +393,8 @@ def run_pipeline(root: Path, *, fetch: bool) -> dict:
     click.echo(f"Computing road exposure for {len(relevant):,} housing and change records…")
     exposed = annotate_exposure(relevant, raw_dir)
     exposed = shared_project_exposure(exposed)
-    geometry, exposed = map_geometry(boundaries, read_json(raw_dir / "roads_idot_2025.geojson"), exposed)
+    geometry, exposed = map_geometry(boundaries, read_json(raw_dir / "roads_idot_2025.geojson"), exposed,
+                                     raw_dir=raw_dir)
     thresholds = {"aadt": exposure["default_traffic_aadt"], "distance_m": exposure["default_distance_m"],
                   "noise_db": exposure["default_noise_db"]}
     full_years = [r for r in exposed if r["permit_year"] <= complete_year]
@@ -435,7 +449,7 @@ def run_pipeline(root: Path, *, fetch: bool) -> dict:
     snapshot = make_snapshot(exposed, geometry, summaries, profile, source_metadata(raw_dir, config), app_path=root / "app")
     write_json(root / "app/src/data.json", snapshot)
     input_names = ["permits_rows.json", "parcels_permit_crosswalk.json", "roads_idot_2025.geojson",
-                   "noise_bts_2023_categories.tif", "boundary_city.geojson", "boundary_communities.geojson",
+                   "noise_bts_2023_categories.tif", "noise_bts_2023_legend.json", "boundary_city.geojson", "boundary_communities.geojson",
                    "boundary_wards.geojson", "boundary_wards.geojson.source.json", "boundary_wards_metadata.json",
                    "parcels_recent_residential_characteristics.json", "parcels_condo_building_groups.json",
                    "parcels_commercial_sample.json", "cdot_totals.json", "cdot_annual.json",
