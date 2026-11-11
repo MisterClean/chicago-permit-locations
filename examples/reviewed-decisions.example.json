@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "example_only": true,
+  "unit_counts": {
+    "EXAMPLE-UNIT": [12, "Synthetic example: two components total twelve homes."]
+  },
+  "scope_decisions": {
+    "EXAMPLE-SCOPE": ["uncertain", "Synthetic example: the authorized scope needs review."]
+  },
+  "shared_projects": [
+    {
+      "permit_ids": ["EXAMPLE-PROJECT-A", "EXAMPLE-PROJECT-B"],
+      "units": 20,
+      "reason": "Synthetic example: one total is repeated across two records.",
+      "source_url": "https://example.org/review"
+    }
+  ]
+}

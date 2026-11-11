@@ -1,0 +1,27 @@
+# Local environments, credentials and personal workspace configuration
+.venv/
+.cache/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Public-source records and derived artifacts may contain addresses, parcel
+# identifiers, coordinates or other identifying details. Keep them local.
+/data/
+/artifacts/
+/private/
+/app/src/data.json
+/app/dist/
+/app/.data-app-offline/
+
+# Raw research captures and record-level audit notes are not public release data.
+/research/*.json
+/research/*.html
+/research/permits.md
+/research/validation-notes.md

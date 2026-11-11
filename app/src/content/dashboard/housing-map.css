@@ -1,0 +1,356 @@
+.housing-map {
+  min-width: 0;
+  color: var(--text);
+}
+
+.housing-map-stage {
+  position: relative;
+  height: clamp(440px, 64vh, 720px);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--chart-1) 5%, var(--background));
+}
+
+.housing-map-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  outline-offset: -4px;
+}
+
+.housing-map-svg:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.housing-map-stage.is-dragging .housing-map-svg,
+.housing-map-stage.is-dragging .housing-map-dot {
+  cursor: grabbing;
+}
+
+.housing-map-city {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--text) 46%, var(--surface));
+  stroke-width: 1;
+  fill-rule: evenodd;
+}
+
+.housing-map-community {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 17%, var(--surface));
+  stroke-width: 0.6;
+}
+
+.housing-map-road {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 50%, var(--surface));
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.housing-map-ward {
+  fill: none;
+  stroke: var(--chart-5);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.housing-map-ward-hit {
+  fill: transparent;
+  fill-rule: evenodd;
+  cursor: pointer;
+}
+
+.housing-map-ward-hit.is-selected {
+  fill: color-mix(in srgb, var(--chart-5) 12%, transparent);
+}
+
+.housing-map-stage.is-dragging .housing-map-ward-hit { cursor: grabbing; }
+
+.housing-map-ward-label {
+  fill: var(--text);
+  stroke: var(--surface);
+  paint-order: stroke;
+  stroke-linejoin: round;
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.housing-map-ward-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  background: var(--chart-5);
+}
+
+.housing-map-note a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.housing-map-community-label {
+  fill: var(--secondary);
+  stroke: var(--surface);
+  paint-order: stroke;
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+.housing-map-dot {
+  fill-opacity: 0.74;
+  stroke: var(--surface);
+  stroke-width: 0.65;
+  cursor: pointer;
+}
+
+.housing-map-dot:hover,
+.housing-map-dot.is-selected {
+  fill-opacity: 1;
+  stroke: var(--text);
+  stroke-width: 1;
+}
+
+.housing-map-dot:focus-visible {
+  outline: none;
+  fill-opacity: 1;
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.housing-map-selection-ring {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.housing-map-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.housing-map-controls .housing-map-zoom,
+.housing-map-controls .housing-map-reset {
+  min-width: 42px;
+  min-height: 40px;
+  border-radius: 0;
+  padding: 8px;
+  background: var(--control);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.housing-map-controls .housing-map-zoom:hover,
+.housing-map-controls .housing-map-reset:hover {
+  background: var(--control-hover);
+}
+
+.housing-map-reset {
+  font-size: 12px;
+}
+
+.housing-map-north {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.housing-map-scale {
+  position: absolute;
+  bottom: 14px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.housing-map-scale-rule {
+  height: 5px;
+  border: solid var(--text);
+  border-width: 0 1px 1px;
+}
+
+.housing-map-tooltip {
+  position: absolute;
+  z-index: 2;
+  width: 250px;
+  max-width: calc(100% - 16px);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.housing-map-tooltip strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.housing-map-tooltip small {
+  color: var(--secondary);
+  font-size: 11px;
+}
+
+.housing-map-footer {
+  padding-top: 12px;
+}
+
+.housing-map-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.housing-map-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.housing-map-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--surface);
+}
+
+.housing-map-swatch.is-exposed { background: var(--chart-2); }
+.housing-map-swatch.is-below { background: var(--chart-1); }
+.housing-map-swatch.is-unknown { background: var(--chart-8); }
+
+.housing-map-road-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  background: color-mix(in srgb, var(--text) 50%, var(--surface));
+}
+
+.housing-map-note {
+  margin: 8px 0 0;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 75ch;
+}
+
+.housing-map-place-summary {
+  margin: 0 0 24px;
+  padding: 0 0 20px 22px;
+  border-left: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.housing-map-place-summary h3 {
+  margin: 2px 0 3px;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.housing-map-place-kind,
+.housing-map-place-period,
+.housing-map-place-note {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.housing-map-place-kind {
+  margin: 0;
+  font-weight: 600;
+}
+
+.housing-map-place-period { margin: 0 0 16px; }
+.housing-map-place-note { margin: 10px 0 0; }
+
+.housing-map-place-counts {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.housing-map-place-counts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.housing-map-place-counts dt { color: var(--secondary); }
+.housing-map-place-counts dd { margin: 0; font-weight: 600; text-align: right; }
+.housing-map-place-result { margin: 0; }
+.housing-map-place-result strong { font-variant-numeric: tabular-nums; }
+
+.housing-map-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100% - 40px);
+  padding: 14px 18px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.housing-map-unavailable {
+  padding: 40px 20px;
+  color: var(--secondary);
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .housing-map-stage { height: 460px; }
+  .housing-map-controls { top: 10px; right: 10px; }
+  .housing-map-key { gap: 7px 14px; }
+  .housing-map-note { font-size: 11px; }
+}
+
+@media (max-width: 1100px) {
+  .housing-map-place-summary { padding-left: 18px; }
+}
+
+@media (max-width: 900px) {
+  .housing-map-place-summary {
+    padding: 20px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border-strong);
+  }
+  .housing-map-place-counts { max-width: 520px; }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "dashboard:f3bd77d2-5029-48ef-a953-8cbc32387335",
+  "exportPreferences": {
+    "selected": null,
+    "destinations": [
+      {
+        "id": "plugin:google-drive@openai-curated",
+        "label": "Google Drive",
+        "icon": "plugin",
+        "plugin": {
+          "name": "google-drive",
+          "marketplace": "openai-curated"
+        },
+        "installedPluginId": "google-drive@openai-curated-remote"
+      }
+    ]
+  },
+  "buildStatus": "complete"
+}

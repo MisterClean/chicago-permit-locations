@@ -1,0 +1,24 @@
+[population]
+start_date = "2006-01-01"
+cutoff_date = "2026-11-10"
+last_complete_year = 2025
+headline = "Identified homes in full-building new-construction permits"
+retain_unlocated_units_in_denominator = true
+include_conversions_in_headline = false
+
+[exposure]
+distance_m = [100, 200, 300, 500]
+traffic_aadt = [10000, 25000, 50000, 100000]
+truck_hcv_aadt = [500, 1000, 2500]
+road_noise_db = [50, 55, 60, 65, 70]
+default_distance_m = 200
+default_traffic_aadt = 25000
+default_noise_db = 55
+metric_crs = "EPSG:26916"
+temporal_interpretation = "Recent road and noise conditions overlaid on historical permit locations"
+
+[audit]
+large_project_review_units = 100
+missing_unit_count_is_zero = false
+parcel_count_is_unit_count = false
+unknown_exposure_is_unexposed = false

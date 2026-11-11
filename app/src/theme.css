@@ -1,0 +1,47 @@
+:root {
+  color-scheme: light dark;
+  --adaptive-theme: 1;
+  --font-sans-default: -apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-sans: var(--vscode-font-family, var(--font-sans-default));
+  --background: light-dark(#ffffff, #171c20);
+  --surface: light-dark(#f8f8f5, #1e252a);
+  --surface-raised: light-dark(#ffffff, #293238);
+  --muted: light-dark(#f1f3f2, #293238);
+  --control: light-dark(#ffffff, #232c32);
+  --control-hover: light-dark(#eaf0f2, #35414a);
+  --interaction-hover: var(--muted);
+  --interaction-active: var(--control-hover);
+  --text: light-dark(#171d21, #f4f6f5);
+  --secondary: light-dark(#56636a, #b7c3c9);
+  --border: light-dark(#dfe4e5, #39454d);
+  --border-strong: light-dark(#b8c2c7, #64757f);
+  --accent: light-dark(#006f96, #7ed8f1);
+  --positive: light-dark(#167b58, #78d9ab);
+  --negative: light-dark(#b93c30, #ff9d8f);
+  --chart-1: light-dark(#0782ad, #50c7e8);
+  --chart-2: light-dark(#ce5745, #ff927c);
+  --chart-3: light-dark(#32836a, #76bf9c);
+  --chart-4: light-dark(#b78125, #efbd63);
+  --chart-5: light-dark(#946f9d, #c5a4cd);
+  --chart-6: light-dark(#406a89, #96bbd6);
+  --chart-7: light-dark(#ba4b56, #f5919a);
+  --chart-8: light-dark(#7d898f, #aab6bc);
+  --chart-neutral-fill: color-mix(in srgb, var(--text) 3%, var(--surface));
+  --ranked-list-fill: color-mix(in srgb, var(--chart-1) 16%, var(--surface));
+  --ranked-list-fill-hover: color-mix(in srgb, var(--chart-1) 24%, var(--surface));
+  --movement-positive: color-mix(in srgb, var(--positive) 75%, var(--text));
+  --movement-negative: color-mix(in srgb, var(--negative) 75%, var(--text));
+  --movement-total: var(--secondary);
+  --card-radius: 0px;
+  --data-card-radius: 0px;
+  --data-card-background: var(--background);
+  --control-radius: 4px;
+  --mark-radius: 0;
+  --card-shadow: none;
+  --shadow: 0 8px 22px -6px rgb(0 0 0 / 20%);
+}
+
+:root:not([data-app-theme]),
+:root:is([data-app-theme="original"], [data-app-theme="codex-classic"]) {
+  --dashboard-background: light-dark(color-mix(in srgb, var(--background) 98.6%, var(--text)), var(--background));
+}
